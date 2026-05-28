@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react"
-
 import {
   BarChart,
   Bar,
@@ -11,7 +10,6 @@ import {
 } from "recharts"
 
 import * as XLSX from "xlsx"
-
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 
@@ -55,25 +53,18 @@ const firebaseConfig = {
     "1:894218479241:web:3e69b9053eb0dae607c858",
 }
 
-const app =
-  initializeApp(firebaseConfig)
+const app = initializeApp(firebaseConfig)
 
 const auth = getAuth(app)
 
 const db = getFirestore(app)
 
-const provider =
-  new GoogleAuthProvider()
-
-/* ================= APP ================= */
+const provider = new GoogleAuthProvider()
 
 export default function App() {
 
   const [user, setUser] =
     useState(null)
-
-  const [darkMode, setDarkMode] =
-    useState(false)
 
   const [transactions,
     setTransactions] =
@@ -86,6 +77,10 @@ export default function App() {
   const [editingId,
     setEditingId] =
     useState(null)
+
+  const [darkMode,
+    setDarkMode] =
+    useState(false)
 
   const [filterStart,
     setFilterStart] =
@@ -124,25 +119,19 @@ export default function App() {
   const loginGoogle =
     async () => {
 
-      try {
-
-        await signInWithPopup(
-          auth,
-          provider
-        )
-
-      } catch (error) {
-
-        alert(error.message)
-      }
+      await signInWithPopup(
+        auth,
+        provider
+      )
     }
 
-  const logout = async () => {
+  const logout =
+    async () => {
 
-    await signOut(auth)
-  }
+      await signOut(auth)
+    }
 
-  /* ================= LOAD DATA ================= */
+  /* ================= LOAD FIRESTORE ================= */
 
   useEffect(() => {
 
@@ -175,9 +164,9 @@ export default function App() {
 
   }, [user])
 
-  /* ================= ADD ================= */
+  /* ================= ADD / UPDATE ================= */
 
-  const addTransaction =
+  const saveTransaction =
     async () => {
 
       if (
@@ -194,53 +183,46 @@ export default function App() {
         return
       }
 
-      const newData = {
+      const data = {
         ...form,
         amount:
           Number(form.amount),
         uid: user.uid,
       }
 
-      try {
+      if (editingId) {
 
-        if (editingId) {
+        await updateDoc(
+          doc(
+            db,
+            "transactions",
+            editingId
+          ),
+          data
+        )
 
-          await updateDoc(
-            doc(
-              db,
-              "transactions",
-              editingId
-            ),
-            newData
-          )
+        setEditingId(null)
 
-          setEditingId(null)
+      } else {
 
-        } else {
-
-          await addDoc(
-            collection(
-              db,
-              "transactions"
-            ),
-            newData
-          )
-        }
-
-        setForm({
-          date: "",
-          type: "Income",
-          category: "",
-          detail: "",
-          amount: "",
-        })
-
-        setShowForm(false)
-
-      } catch (error) {
-
-        alert(error.message)
+        await addDoc(
+          collection(
+            db,
+            "transactions"
+          ),
+          data
+        )
       }
+
+      setForm({
+        date: "",
+        type: "Income",
+        category: "",
+        detail: "",
+        amount: "",
+      })
+
+      setShowForm(false)
     }
 
   /* ================= DELETE ================= */
@@ -269,9 +251,9 @@ export default function App() {
   const editTransaction =
     (item) => {
 
-      setForm(item)
-
       setEditingId(item.id)
+
+      setForm(item)
 
       setShowForm(true)
     }
@@ -285,8 +267,7 @@ export default function App() {
         if (
           !filterStart &&
           !filterEnd
-        )
-          return true
+        ) return true
 
         const itemDate =
           new Date(item.date)
@@ -295,15 +276,13 @@ export default function App() {
           filterStart &&
           itemDate <
           new Date(filterStart)
-        )
-          return false
+        ) return false
 
         if (
           filterEnd &&
           itemDate >
           new Date(filterEnd)
-        )
-          return false
+        ) return false
 
         return true
       }
@@ -340,7 +319,7 @@ export default function App() {
   const balance =
     income - expense
 
-  /* ================= EXPORT ================= */
+  /* ================= EXPORT EXCEL ================= */
 
   const exportExcel =
     () => {
@@ -356,7 +335,7 @@ export default function App() {
       XLSX.utils.book_append_sheet(
         workbook,
         worksheet,
-        "Transaksi"
+        "Keuangan"
       )
 
       XLSX.writeFile(
@@ -365,19 +344,21 @@ export default function App() {
       )
     }
 
+  /* ================= EXPORT PDF ================= */
+
   const exportPDF =
     () => {
 
-      const doc =
+      const pdf =
         new jsPDF()
 
-      doc.text(
+      pdf.text(
         "Laporan Keuangan",
         14,
         15
       )
 
-      autoTable(doc, {
+      autoTable(pdf, {
         head: [[
           "Tanggal",
           "Tipe",
@@ -398,7 +379,7 @@ export default function App() {
           ),
       })
 
-      doc.save(
+      pdf.save(
         "laporan-keuangan.pdf"
       )
     }
@@ -416,16 +397,17 @@ export default function App() {
     },
   ]
 
-  /* ================= LOGIN SCREEN ================= */
+  /* ================= LOGIN PAGE ================= */
 
   if (!user) {
 
     return (
-      <div className="min-h-screen bg-slate-100 flex items-center justify-center p-6">
 
-        <div className="bg-white shadow-2xl rounded-3xl p-10 w-full max-w-md text-center">
+      <div className="min-h-screen bg-slate-100 flex items-center justify-center">
 
-          <h1 className="text-4xl font-bold text-blue-900 mb-4">
+        <div className="bg-white p-10 rounded-3xl shadow-2xl text-center w-full max-w-md">
+
+          <h1 className="text-4xl font-bold mb-4 text-blue-900">
             Pengelola Keuangan
           </h1>
 
@@ -435,7 +417,7 @@ export default function App() {
 
           <button
             onClick={loginGoogle}
-            className="w-full bg-blue-700 hover:bg-blue-800 text-white py-4 rounded-2xl font-semibold text-lg"
+            className="w-full bg-blue-700 hover:bg-blue-800 text-white py-4 rounded-2xl font-semibold"
           >
             Login Google
           </button>
@@ -446,9 +428,10 @@ export default function App() {
     )
   }
 
-  /* ================= MAIN ================= */
+  /* ================= MAIN APP ================= */
 
   return (
+
     <div className={`min-h-screen ${
       darkMode
         ? "bg-slate-900 text-white"
@@ -458,13 +441,14 @@ export default function App() {
       <div className="flex flex-col lg:flex-row">
 
         {/* SIDEBAR */}
+
         <aside className="w-full lg:w-72 bg-blue-900 text-white p-6">
 
-          <h1 className="text-3xl font-bold mb-8">
+          <h1 className="text-4xl font-bold mb-8">
             Pengelola Keuangan
           </h1>
 
-          <div className="mb-6">
+          <div className="mb-8">
 
             <img
               src={user.photoURL}
@@ -472,7 +456,7 @@ export default function App() {
               className="w-16 h-16 rounded-full mb-3"
             />
 
-            <h2 className="font-bold">
+            <h2 className="font-bold text-xl">
               {user.displayName}
             </h2>
 
@@ -482,42 +466,48 @@ export default function App() {
 
           </div>
 
-          <div className="bg-white/10 rounded-2xl p-5 mb-6">
+          <div className="bg-white/10 rounded-3xl p-5 mb-6">
 
-            <h2 className="text-lg font-semibold mb-4">
+            <h2 className="text-xl font-bold mb-5">
               Summary
             </h2>
 
-            <div className="space-y-4">
+            <div className="space-y-5">
 
               <div>
-                <p className="text-sm opacity-70">
+
+                <p className="opacity-70">
                   Income
                 </p>
 
-                <h3 className="text-2xl font-bold text-green-300">
+                <h3 className="text-3xl font-bold text-green-300">
                   Rp {income.toLocaleString()}
                 </h3>
+
               </div>
 
               <div>
-                <p className="text-sm opacity-70">
+
+                <p className="opacity-70">
                   Expense
                 </p>
 
-                <h3 className="text-2xl font-bold text-red-300">
+                <h3 className="text-3xl font-bold text-red-300">
                   Rp {expense.toLocaleString()}
                 </h3>
+
               </div>
 
               <div>
-                <p className="text-sm opacity-70">
+
+                <p className="opacity-70">
                   Balance
                 </p>
 
-                <h3 className="text-3xl font-bold">
+                <h3 className="text-4xl font-bold">
                   Rp {balance.toLocaleString()}
                 </h3>
+
               </div>
 
             </div>
@@ -530,7 +520,7 @@ export default function App() {
                 !showForm
               )
             }
-            className="w-full bg-white text-blue-900 font-semibold py-3 rounded-xl"
+            className="w-full bg-white text-blue-900 py-4 rounded-2xl font-bold mb-4"
           >
             + Tambah Transaksi
           </button>
@@ -541,16 +531,14 @@ export default function App() {
                 !darkMode
               )
             }
-            className="w-full mt-4 bg-black/30 py-3 rounded-xl"
+            className="w-full bg-indigo-950 py-4 rounded-2xl mb-4"
           >
-            {darkMode
-              ? "☀ Light Mode"
-              : "🌙 Dark Mode"}
+            🌙 Dark Mode
           </button>
 
           <button
             onClick={logout}
-            className="w-full mt-4 bg-red-600 py-3 rounded-xl"
+            className="w-full bg-red-600 py-4 rounded-2xl"
           >
             Logout
           </button>
@@ -558,10 +546,12 @@ export default function App() {
         </aside>
 
         {/* MAIN */}
-        <main className="flex-1 p-4 lg:p-6 overflow-x-auto">
+
+        <main className="flex-1 p-6">
 
           {/* HEADER */}
-          <div className={`rounded-3xl shadow-lg p-5 mb-6 ${
+
+          <div className={`rounded-3xl p-6 shadow-lg mb-6 ${
             darkMode
               ? "bg-slate-800"
               : "bg-white"
@@ -571,7 +561,7 @@ export default function App() {
 
               <div>
 
-                <h2 className="text-3xl font-bold">
+                <h2 className="text-4xl font-bold">
                   Dashboard
                 </h2>
 
@@ -591,7 +581,7 @@ export default function App() {
                       e.target.value
                     )
                   }
-                  className="border rounded-xl px-4 py-2 text-black"
+                  className="border rounded-2xl px-4 py-3 text-black"
                 />
 
                 <input
@@ -602,19 +592,19 @@ export default function App() {
                       e.target.value
                     )
                   }
-                  className="border rounded-xl px-4 py-2 text-black"
+                  className="border rounded-2xl px-4 py-3 text-black"
                 />
 
                 <button
                   onClick={exportExcel}
-                  className="bg-green-600 text-white px-4 rounded-xl"
+                  className="bg-green-500 text-white px-5 rounded-2xl"
                 >
                   Export Excel
                 </button>
 
                 <button
                   onClick={exportPDF}
-                  className="bg-red-600 text-white px-4 rounded-xl"
+                  className="bg-red-500 text-white px-5 rounded-2xl"
                 >
                   Export PDF
                 </button>
@@ -626,21 +616,22 @@ export default function App() {
           </div>
 
           {/* FORM */}
+
           {showForm && (
 
-            <div className={`rounded-3xl shadow-lg p-6 mb-6 ${
+            <div className={`rounded-3xl p-6 shadow-lg mb-6 ${
               darkMode
                 ? "bg-slate-800"
                 : "bg-white"
             }`}>
 
-              <h3 className="text-2xl font-bold mb-5">
+              <h2 className="text-3xl font-bold mb-6">
 
                 {editingId
                   ? "Edit Transaksi"
                   : "Tambah Transaksi"}
 
-              </h3>
+              </h2>
 
               <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
 
@@ -654,7 +645,7 @@ export default function App() {
                         e.target.value,
                     })
                   }
-                  className="border rounded-xl px-4 py-3 text-black"
+                  className="border rounded-2xl px-4 py-3 text-black"
                 />
 
                 <select
@@ -666,7 +657,7 @@ export default function App() {
                         e.target.value,
                     })
                   }
-                  className="border rounded-xl px-4 py-3 text-black"
+                  className="border rounded-2xl px-4 py-3 text-black"
                 >
                   <option>
                     Income
@@ -688,7 +679,7 @@ export default function App() {
                         e.target.value,
                     })
                   }
-                  className="border rounded-xl px-4 py-3 text-black"
+                  className="border rounded-2xl px-4 py-3 text-black"
                 />
 
                 <input
@@ -702,7 +693,7 @@ export default function App() {
                         e.target.value,
                     })
                   }
-                  className="border rounded-xl px-4 py-3 text-black"
+                  className="border rounded-2xl px-4 py-3 text-black"
                 />
 
                 <input
@@ -716,14 +707,14 @@ export default function App() {
                         e.target.value,
                     })
                   }
-                  className="border rounded-xl px-4 py-3 text-black"
+                  className="border rounded-2xl px-4 py-3 text-black"
                 />
 
               </div>
 
               <button
-                onClick={addTransaction}
-                className="mt-5 bg-blue-700 hover:bg-blue-800 text-white px-6 py-3 rounded-xl"
+                onClick={saveTransaction}
+                className="mt-6 bg-blue-700 hover:bg-blue-800 text-white px-6 py-3 rounded-2xl"
               >
                 {editingId
                   ? "Update"
@@ -733,6 +724,158 @@ export default function App() {
             </div>
 
           )}
+
+          {/* CHART */}
+
+          <div className={`rounded-3xl p-6 shadow-lg mb-6 ${
+            darkMode
+              ? "bg-slate-800"
+              : "bg-white"
+          }`}>
+
+            <h2 className="text-3xl font-bold mb-5">
+              Grafik Keuangan
+            </h2>
+
+            <ResponsiveContainer
+              width="100%"
+              height={300}
+            >
+
+              <BarChart
+                data={chartData}
+              >
+
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                />
+
+                <XAxis
+                  dataKey="name"
+                />
+
+                <YAxis />
+
+                <Tooltip />
+
+                <Bar
+                  dataKey="total"
+                  radius={[10, 10, 0, 0]}
+                />
+
+              </BarChart>
+
+            </ResponsiveContainer>
+
+          </div>
+
+          {/* TABLE */}
+
+          <div className={`rounded-3xl p-6 shadow-lg overflow-x-auto ${
+            darkMode
+              ? "bg-slate-800"
+              : "bg-white"
+          }`}>
+
+            <table className="w-full">
+
+              <thead>
+
+                <tr className="border-b">
+
+                  <th className="text-left p-3">
+                    Tanggal
+                  </th>
+
+                  <th className="text-left p-3">
+                    Tipe
+                  </th>
+
+                  <th className="text-left p-3">
+                    Kategori
+                  </th>
+
+                  <th className="text-left p-3">
+                    Detail
+                  </th>
+
+                  <th className="text-left p-3">
+                    Nominal
+                  </th>
+
+                  <th className="text-left p-3">
+                    Action
+                  </th>
+
+                </tr>
+
+              </thead>
+
+              <tbody>
+
+                {filteredTransactions.map(
+                  (item) => (
+
+                    <tr
+                      key={item.id}
+                      className="border-b"
+                    >
+
+                      <td className="p-3">
+                        {item.date}
+                      </td>
+
+                      <td className="p-3">
+                        {item.type}
+                      </td>
+
+                      <td className="p-3">
+                        {item.category}
+                      </td>
+
+                      <td className="p-3">
+                        {item.detail}
+                      </td>
+
+                      <td className="p-3">
+                        Rp {item.amount.toLocaleString()}
+                      </td>
+
+                      <td className="p-3 flex gap-2">
+
+                        <button
+                          onClick={() =>
+                            editTransaction(
+                              item
+                            )
+                          }
+                          className="bg-yellow-500 text-white px-3 py-1 rounded-xl"
+                        >
+                          Edit
+                        </button>
+
+                        <button
+                          onClick={() =>
+                            deleteTransaction(
+                              item.id
+                            )
+                          }
+                          className="bg-red-600 text-white px-3 py-1 rounded-xl"
+                        >
+                          Hapus
+                        </button>
+
+                      </td>
+
+                    </tr>
+                  )
+                )}
+
+              </tbody>
+
+            </table>
+
+          </div>
 
         </main>
 
