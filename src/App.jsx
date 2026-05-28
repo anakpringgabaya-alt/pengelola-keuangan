@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+
 import {
   BarChart,
   Bar,
@@ -15,6 +16,10 @@ import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 
 import {
+  initializeApp,
+} from "firebase/app"
+
+import {
   getAuth,
   GoogleAuthProvider,
   signInWithPopup,
@@ -22,135 +27,76 @@ import {
   onAuthStateChanged,
 } from "firebase/auth"
 
-import { initializeApp } from "firebase/app"
+import {
+  getFirestore,
+  collection,
+  addDoc,
+  onSnapshot,
+  deleteDoc,
+  doc,
+  updateDoc,
+  query,
+  where,
+} from "firebase/firestore"
 
 /* ================= FIREBASE ================= */
 
 const firebaseConfig = {
   apiKey: "AIzaSyBdsZo8WQ7N1iI3KaFjrCFBFDy0dfKNcoQ",
-  authDomain: "pengelola-keuangan-1d08c.firebaseapp.com",
-  projectId: "pengelola-keuangan-1d08c",
+  authDomain:
+    "pengelola-keuangan-1d08c.firebaseapp.com",
+  projectId:
+    "pengelola-keuangan-1d08c",
   storageBucket:
     "pengelola-keuangan-1d08c.firebasestorage.app",
-  messagingSenderId: "894218479241",
+  messagingSenderId:
+    "894218479241",
   appId:
     "1:894218479241:web:3e69b9053eb0dae607c858",
 }
 
-const app = initializeApp(firebaseConfig)
+const app =
+  initializeApp(firebaseConfig)
 
 const auth = getAuth(app)
 
-const provider = new GoogleAuthProvider()
+const db = getFirestore(app)
+
+const provider =
+  new GoogleAuthProvider()
 
 /* ================= APP ================= */
 
 export default function App() {
 
-  const [user, setUser] = useState(null)
-
-  const [darkMode, setDarkMode] = useState(false)
-
-  const [transactions, setTransactions] =
-    useState(() => {
-      const saved =
-        localStorage.getItem("transactions")
-
-      return saved ? JSON.parse(saved) : []
-    })
-
-  const [showForm, setShowForm] =
-    useState(false)
-
-  const [editingIndex, setEditingIndex] =
+  const [user, setUser] =
     useState(null)
 
-  const [filterStart, setFilterStart] =
+  const [darkMode, setDarkMode] =
+    useState(false)
+
+  const [transactions,
+    setTransactions] =
+    useState([])
+
+  const [showForm,
+    setShowForm] =
+    useState(false)
+
+  const [editingId,
+    setEditingId] =
+    useState(null)
+
+  const [filterStart,
+    setFilterStart] =
     useState("")
 
-  const [filterEnd, setFilterEnd] =
+  const [filterEnd,
+    setFilterEnd] =
     useState("")
 
-  const [form, setForm] = useState({
-    date: "",
-    type: "Income",
-    category: "",
-    detail: "",
-    amount: "",
-  })
-
-  /* ================= LOGIN ================= */
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(
-      auth,
-      (currentUser) => {
-        setUser(currentUser)
-      }
-    )
-
-    return () => unsubscribe()
-  }, [])
-
-  const loginGoogle = async () => {
-    try {
-      await signInWithPopup(auth, provider)
-    } catch (error) {
-      alert(error.message)
-    }
-  }
-
-  const logout = async () => {
-    await signOut(auth)
-  }
-
-  /* ================= STORAGE ================= */
-
-  useEffect(() => {
-    localStorage.setItem(
-      "transactions",
-      JSON.stringify(transactions)
-    )
-  }, [transactions])
-
-  /* ================= TRANSACTION ================= */
-
-  const addTransaction = () => {
-
-    if (
-      !form.date ||
-      !form.category ||
-      !form.detail ||
-      !form.amount
-    ) {
-      alert("Lengkapi data")
-      return
-    }
-
-    const newData = {
-      ...form,
-      amount: Number(form.amount),
-    }
-
-    if (editingIndex !== null) {
-
-      const updated = [...transactions]
-
-      updated[editingIndex] = newData
-
-      setTransactions(updated)
-
-      setEditingIndex(null)
-
-    } else {
-
-      setTransactions([
-        ...transactions,
-        newData,
-      ])
-    }
-
-    setForm({
+  const [form, setForm] =
+    useState({
       date: "",
       type: "Income",
       category: "",
@@ -158,139 +104,304 @@ export default function App() {
       amount: "",
     })
 
-    setShowForm(false)
-  }
+  /* ================= LOGIN ================= */
 
-  const deleteTransaction = (index) => {
+  useEffect(() => {
 
-    if (confirm("Hapus transaksi?")) {
+    const unsubscribe =
+      onAuthStateChanged(
+        auth,
+        (currentUser) => {
 
-      const updated =
-        transactions.filter(
-          (_, i) => i !== index
+          setUser(currentUser)
+        }
+      )
+
+    return () => unsubscribe()
+
+  }, [])
+
+  const loginGoogle =
+    async () => {
+
+      try {
+
+        await signInWithPopup(
+          auth,
+          provider
         )
 
-      setTransactions(updated)
+      } catch (error) {
+
+        alert(error.message)
+      }
     }
+
+  const logout = async () => {
+
+    await signOut(auth)
   }
 
-  const editTransaction = (index) => {
+  /* ================= LOAD DATA ================= */
 
-    setForm(transactions[index])
+  useEffect(() => {
 
-    setEditingIndex(index)
+    if (!user) return
 
-    setShowForm(true)
-  }
+    const q = query(
+      collection(db, "transactions"),
+      where(
+        "uid",
+        "==",
+        user.uid
+      )
+    )
+
+    const unsubscribe =
+      onSnapshot(q, (snapshot) => {
+
+        const data =
+          snapshot.docs.map(
+            (doc) => ({
+              id: doc.id,
+              ...doc.data(),
+            })
+          )
+
+        setTransactions(data)
+      })
+
+    return () => unsubscribe()
+
+  }, [user])
+
+  /* ================= ADD ================= */
+
+  const addTransaction =
+    async () => {
+
+      if (
+        !form.date ||
+        !form.category ||
+        !form.detail ||
+        !form.amount
+      ) {
+
+        alert(
+          "Lengkapi data"
+        )
+
+        return
+      }
+
+      const newData = {
+        ...form,
+        amount:
+          Number(form.amount),
+        uid: user.uid,
+      }
+
+      try {
+
+        if (editingId) {
+
+          await updateDoc(
+            doc(
+              db,
+              "transactions",
+              editingId
+            ),
+            newData
+          )
+
+          setEditingId(null)
+
+        } else {
+
+          await addDoc(
+            collection(
+              db,
+              "transactions"
+            ),
+            newData
+          )
+        }
+
+        setForm({
+          date: "",
+          type: "Income",
+          category: "",
+          detail: "",
+          amount: "",
+        })
+
+        setShowForm(false)
+
+      } catch (error) {
+
+        alert(error.message)
+      }
+    }
+
+  /* ================= DELETE ================= */
+
+  const deleteTransaction =
+    async (id) => {
+
+      if (
+        confirm(
+          "Hapus transaksi?"
+        )
+      ) {
+
+        await deleteDoc(
+          doc(
+            db,
+            "transactions",
+            id
+          )
+        )
+      }
+    }
+
+  /* ================= EDIT ================= */
+
+  const editTransaction =
+    (item) => {
+
+      setForm(item)
+
+      setEditingId(item.id)
+
+      setShowForm(true)
+    }
 
   /* ================= FILTER ================= */
 
   const filteredTransactions =
-    transactions.filter((item) => {
+    transactions.filter(
+      (item) => {
 
-      if (!filterStart && !filterEnd)
+        if (
+          !filterStart &&
+          !filterEnd
+        )
+          return true
+
+        const itemDate =
+          new Date(item.date)
+
+        if (
+          filterStart &&
+          itemDate <
+          new Date(filterStart)
+        )
+          return false
+
+        if (
+          filterEnd &&
+          itemDate >
+          new Date(filterEnd)
+        )
+          return false
+
         return true
-
-      const itemDate =
-        new Date(item.date)
-
-      if (
-        filterStart &&
-        itemDate < new Date(filterStart)
-      )
-        return false
-
-      if (
-        filterEnd &&
-        itemDate > new Date(filterEnd)
-      )
-        return false
-
-      return true
-    })
+      }
+    )
 
   /* ================= SUMMARY ================= */
 
-  const income = filteredTransactions
-    .filter(
-      (item) => item.type === "Income"
-    )
-    .reduce(
-      (a, b) => a + b.amount,
-      0
-    )
+  const income =
+    filteredTransactions
+      .filter(
+        (item) =>
+          item.type ===
+          "Income"
+      )
+      .reduce(
+        (a, b) =>
+          a + b.amount,
+        0
+      )
 
-  const expense = filteredTransactions
-    .filter(
-      (item) => item.type === "Expense"
-    )
-    .reduce(
-      (a, b) => a + b.amount,
-      0
-    )
+  const expense =
+    filteredTransactions
+      .filter(
+        (item) =>
+          item.type ===
+          "Expense"
+      )
+      .reduce(
+        (a, b) =>
+          a + b.amount,
+        0
+      )
 
-  const balance = income - expense
+  const balance =
+    income - expense
 
   /* ================= EXPORT ================= */
 
-  const exportExcel = () => {
+  const exportExcel =
+    () => {
 
-    const worksheet =
-      XLSX.utils.json_to_sheet(
-        filteredTransactions
+      const worksheet =
+        XLSX.utils.json_to_sheet(
+          filteredTransactions
+        )
+
+      const workbook =
+        XLSX.utils.book_new()
+
+      XLSX.utils.book_append_sheet(
+        workbook,
+        worksheet,
+        "Transaksi"
       )
 
-    const workbook =
-      XLSX.utils.book_new()
+      XLSX.writeFile(
+        workbook,
+        "keuangan.xlsx"
+      )
+    }
 
-    XLSX.utils.book_append_sheet(
-      workbook,
-      worksheet,
-      "Transaksi"
-    )
+  const exportPDF =
+    () => {
 
-    XLSX.writeFile(
-      workbook,
-      "keuangan.xlsx"
-    )
-  }
+      const doc =
+        new jsPDF()
 
-  const exportPDF = () => {
+      doc.text(
+        "Laporan Keuangan",
+        14,
+        15
+      )
 
-    const doc = new jsPDF()
-
-    doc.text(
-      "Laporan Keuangan",
-      14,
-      15
-    )
-
-    autoTable(doc, {
-      head: [
-        [
+      autoTable(doc, {
+        head: [[
           "Tanggal",
           "Tipe",
           "Kategori",
           "Detail",
           "Nominal",
-        ],
-      ],
-      body:
-        filteredTransactions.map(
-          (item) => [
-            item.date,
-            item.type,
-            item.category,
-            item.detail,
-            `Rp ${item.amount.toLocaleString()}`,
-          ]
-        ),
-    })
+        ]],
 
-    doc.save(
-      "laporan-keuangan.pdf"
-    )
-  }
+        body:
+          filteredTransactions.map(
+            (item) => [
+              item.date,
+              item.type,
+              item.category,
+              item.detail,
+              `Rp ${item.amount.toLocaleString()}`,
+            ]
+          ),
+      })
+
+      doc.save(
+        "laporan-keuangan.pdf"
+      )
+    }
 
   /* ================= CHART ================= */
 
@@ -338,17 +449,15 @@ export default function App() {
   /* ================= MAIN ================= */
 
   return (
-    <div
-      className={`min-h-screen ${
-        darkMode
-          ? "bg-slate-900 text-white"
-          : "bg-slate-100 text-black"
-      }`}
-    >
+    <div className={`min-h-screen ${
+      darkMode
+        ? "bg-slate-900 text-white"
+        : "bg-slate-100 text-black"
+    }`}>
 
       <div className="flex flex-col lg:flex-row">
 
-        {/* Sidebar */}
+        {/* SIDEBAR */}
         <aside className="w-full lg:w-72 bg-blue-900 text-white p-6">
 
           <h1 className="text-3xl font-bold mb-8">
@@ -417,16 +526,20 @@ export default function App() {
 
           <button
             onClick={() =>
-              setShowForm(!showForm)
+              setShowForm(
+                !showForm
+              )
             }
-            className="w-full bg-white text-blue-900 font-semibold py-3 rounded-xl hover:bg-slate-200 transition"
+            className="w-full bg-white text-blue-900 font-semibold py-3 rounded-xl"
           >
             + Tambah Transaksi
           </button>
 
           <button
             onClick={() =>
-              setDarkMode(!darkMode)
+              setDarkMode(
+                !darkMode
+              )
             }
             className="w-full mt-4 bg-black/30 py-3 rounded-xl"
           >
@@ -444,17 +557,15 @@ export default function App() {
 
         </aside>
 
-        {/* Main */}
+        {/* MAIN */}
         <main className="flex-1 p-4 lg:p-6 overflow-x-auto">
 
-          {/* Header */}
-          <div
-            className={`rounded-3xl shadow-lg p-5 mb-6 ${
-              darkMode
-                ? "bg-slate-800"
-                : "bg-white"
-            }`}
-          >
+          {/* HEADER */}
+          <div className={`rounded-3xl shadow-lg p-5 mb-6 ${
+            darkMode
+              ? "bg-slate-800"
+              : "bg-white"
+          }`}>
 
             <div className="flex flex-col lg:flex-row justify-between gap-4">
 
@@ -465,8 +576,7 @@ export default function App() {
                 </h2>
 
                 <p className="text-slate-500">
-                  Kelola pemasukan &
-                  pengeluaran
+                  Kelola pemasukan & pengeluaran
                 </p>
 
               </div>
@@ -518,18 +628,18 @@ export default function App() {
           {/* FORM */}
           {showForm && (
 
-            <div
-              className={`rounded-3xl shadow-lg p-6 mb-6 ${
-                darkMode
-                  ? "bg-slate-800"
-                  : "bg-white"
-              }`}
-            >
+            <div className={`rounded-3xl shadow-lg p-6 mb-6 ${
+              darkMode
+                ? "bg-slate-800"
+                : "bg-white"
+            }`}>
 
               <h3 className="text-2xl font-bold mb-5">
-                {editingIndex !== null
+
+                {editingId
                   ? "Edit Transaksi"
                   : "Tambah Transaksi"}
+
               </h3>
 
               <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
@@ -554,7 +664,6 @@ export default function App() {
                       ...form,
                       type:
                         e.target.value,
-                      category: "",
                     })
                   }
                   className="border rounded-xl px-4 py-3 text-black"
@@ -568,7 +677,9 @@ export default function App() {
                   </option>
                 </select>
 
-                <select
+                <input
+                  type="text"
+                  placeholder="Kategori"
                   value={form.category}
                   onChange={(e) =>
                     setForm({
@@ -578,48 +689,7 @@ export default function App() {
                     })
                   }
                   className="border rounded-xl px-4 py-3 text-black"
-                >
-
-                  <option value="">
-                    Pilih Kategori
-                  </option>
-
-                  {form.type ===
-                  "Income" ? (
-                    <>
-                      <option>
-                        Gaji
-                      </option>
-
-                      <option>
-                        Bonus
-                      </option>
-
-                      <option>
-                        Freelance
-                      </option>
-                    </>
-                  ) : (
-                    <>
-                      <option>
-                        Makan
-                      </option>
-
-                      <option>
-                        Transport
-                      </option>
-
-                      <option>
-                        Belanja
-                      </option>
-
-                      <option>
-                        Tagihan
-                      </option>
-                    </>
-                  )}
-
-                </select>
+                />
 
                 <input
                   type="text"
@@ -655,7 +725,7 @@ export default function App() {
                 onClick={addTransaction}
                 className="mt-5 bg-blue-700 hover:bg-blue-800 text-white px-6 py-3 rounded-xl"
               >
-                {editingIndex !== null
+                {editingId
                   ? "Update"
                   : "Simpan"}
               </button>
@@ -663,207 +733,6 @@ export default function App() {
             </div>
 
           )}
-
-          {/* CARDS */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-
-            <div className="bg-green-500 text-white p-6 rounded-3xl shadow-lg">
-              <p className="text-lg">
-                Income
-              </p>
-
-              <h3 className="text-4xl font-bold mt-3">
-                Rp {(income / 1000000).toFixed(1)} JT
-              </h3>
-            </div>
-
-            <div className="bg-red-500 text-white p-6 rounded-3xl shadow-lg">
-              <p className="text-lg">
-                Expense
-              </p>
-
-              <h3 className="text-4xl font-bold mt-3">
-                Rp {(expense / 1000000).toFixed(1)} JT
-              </h3>
-            </div>
-
-            <div className="bg-blue-700 text-white p-6 rounded-3xl shadow-lg">
-              <p className="text-lg">
-                Balance
-              </p>
-
-              <h3 className="text-4xl font-bold mt-3">
-                Rp {(balance / 1000000).toFixed(1)} JT
-              </h3>
-            </div>
-
-          </div>
-
-          {/* CHART */}
-          <div
-            className={`rounded-3xl shadow-lg p-6 mb-6 ${
-              darkMode
-                ? "bg-slate-800"
-                : "bg-white"
-            }`}
-          >
-
-            <h3 className="text-2xl font-bold mb-4">
-              Grafik Keuangan
-            </h3>
-
-            <div className="w-full h-80">
-
-              <ResponsiveContainer
-                width="100%"
-                height="100%"
-              >
-
-                <BarChart data={chartData}>
-
-                  <CartesianGrid strokeDasharray="3 3" />
-
-                  <XAxis dataKey="name" />
-
-                  <YAxis />
-
-                  <Tooltip />
-
-                  <Bar
-                    dataKey="total"
-                    fill="#2563eb"
-                    radius={[10, 10, 0, 0]}
-                  />
-
-                </BarChart>
-
-              </ResponsiveContainer>
-
-            </div>
-
-          </div>
-
-          {/* TABLE */}
-          <div
-            className={`rounded-3xl shadow-lg overflow-x-auto ${
-              darkMode
-                ? "bg-slate-800"
-                : "bg-white"
-            }`}
-          >
-
-            <table className="w-full min-w-[700px]">
-
-              <thead className="bg-slate-200 text-black">
-
-                <tr>
-
-                  <th className="text-left p-4">
-                    Tanggal
-                  </th>
-
-                  <th className="text-left p-4">
-                    Tipe
-                  </th>
-
-                  <th className="text-left p-4">
-                    Kategori
-                  </th>
-
-                  <th className="text-left p-4">
-                    Detail
-                  </th>
-
-                  <th className="text-left p-4">
-                    Nominal
-                  </th>
-
-                  <th className="text-left p-4">
-                    Action
-                  </th>
-
-                </tr>
-
-              </thead>
-
-              <tbody>
-
-                {filteredTransactions.map(
-                  (item, index) => (
-
-                    <tr
-                      key={index}
-                      className="border-b"
-                    >
-
-                      <td className="p-4">
-                        {item.date}
-                      </td>
-
-                      <td className="p-4">
-
-                        <span
-                          className={`px-3 py-1 rounded-full text-sm ${
-                            item.type ===
-                            "Income"
-                              ? "bg-green-100 text-green-700"
-                              : "bg-red-100 text-red-700"
-                          }`}
-                        >
-                          {item.type}
-                        </span>
-
-                      </td>
-
-                      <td className="p-4">
-                        {item.category}
-                      </td>
-
-                      <td className="p-4">
-                        {item.detail}
-                      </td>
-
-                      <td className="p-4 font-bold">
-                        Rp{" "}
-                        {item.amount.toLocaleString()}
-                      </td>
-
-                      <td className="p-4 flex gap-2">
-
-                        <button
-                          onClick={() =>
-                            editTransaction(
-                              index
-                            )
-                          }
-                          className="bg-yellow-500 text-white px-3 py-1 rounded-lg"
-                        >
-                          Edit
-                        </button>
-
-                        <button
-                          onClick={() =>
-                            deleteTransaction(
-                              index
-                            )
-                          }
-                          className="bg-red-600 text-white px-3 py-1 rounded-lg"
-                        >
-                          Hapus
-                        </button>
-
-                      </td>
-
-                    </tr>
-
-                  )
-                )}
-
-              </tbody>
-
-            </table>
-
-          </div>
 
         </main>
 
