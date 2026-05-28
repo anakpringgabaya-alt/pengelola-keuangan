@@ -14,20 +14,62 @@ import * as XLSX from "xlsx"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 
+import {
+  getAuth,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signOut,
+  onAuthStateChanged,
+} from "firebase/auth"
+
+import { initializeApp } from "firebase/app"
+
+/* ================= FIREBASE ================= */
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBdsZo8WQ7N1iI3KaFjrCFBFDy0dfKNcoQ",
+  authDomain: "pengelola-keuangan-1d08c.firebaseapp.com",
+  projectId: "pengelola-keuangan-1d08c",
+  storageBucket:
+    "pengelola-keuangan-1d08c.firebasestorage.app",
+  messagingSenderId: "894218479241",
+  appId:
+    "1:894218479241:web:3e69b9053eb0dae607c858",
+}
+
+const app = initializeApp(firebaseConfig)
+
+const auth = getAuth(app)
+
+const provider = new GoogleAuthProvider()
+
+/* ================= APP ================= */
+
 export default function App() {
+
+  const [user, setUser] = useState(null)
+
   const [darkMode, setDarkMode] = useState(false)
 
-  const [transactions, setTransactions] = useState(() => {
-    const saved = localStorage.getItem("transactions")
-    return saved ? JSON.parse(saved) : []
-  })
+  const [transactions, setTransactions] =
+    useState(() => {
+      const saved =
+        localStorage.getItem("transactions")
 
-  const [showForm, setShowForm] = useState(false)
+      return saved ? JSON.parse(saved) : []
+    })
 
-  const [editingIndex, setEditingIndex] = useState(null)
+  const [showForm, setShowForm] =
+    useState(false)
 
-  const [filterStart, setFilterStart] = useState("")
-  const [filterEnd, setFilterEnd] = useState("")
+  const [editingIndex, setEditingIndex] =
+    useState(null)
+
+  const [filterStart, setFilterStart] =
+    useState("")
+
+  const [filterEnd, setFilterEnd] =
+    useState("")
 
   const [form, setForm] = useState({
     date: "",
@@ -37,6 +79,33 @@ export default function App() {
     amount: "",
   })
 
+  /* ================= LOGIN ================= */
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(
+      auth,
+      (currentUser) => {
+        setUser(currentUser)
+      }
+    )
+
+    return () => unsubscribe()
+  }, [])
+
+  const loginGoogle = async () => {
+    try {
+      await signInWithPopup(auth, provider)
+    } catch (error) {
+      alert(error.message)
+    }
+  }
+
+  const logout = async () => {
+    await signOut(auth)
+  }
+
+  /* ================= STORAGE ================= */
+
   useEffect(() => {
     localStorage.setItem(
       "transactions",
@@ -44,7 +113,10 @@ export default function App() {
     )
   }, [transactions])
 
+  /* ================= TRANSACTION ================= */
+
   const addTransaction = () => {
+
     if (
       !form.date ||
       !form.category ||
@@ -61,12 +133,21 @@ export default function App() {
     }
 
     if (editingIndex !== null) {
+
       const updated = [...transactions]
+
       updated[editingIndex] = newData
+
       setTransactions(updated)
+
       setEditingIndex(null)
+
     } else {
-      setTransactions([...transactions, newData])
+
+      setTransactions([
+        ...transactions,
+        newData,
+      ])
     }
 
     setForm({
@@ -81,51 +162,86 @@ export default function App() {
   }
 
   const deleteTransaction = (index) => {
+
     if (confirm("Hapus transaksi?")) {
-      const updated = transactions.filter(
-        (_, i) => i !== index
-      )
+
+      const updated =
+        transactions.filter(
+          (_, i) => i !== index
+        )
 
       setTransactions(updated)
     }
   }
 
   const editTransaction = (index) => {
+
     setForm(transactions[index])
+
     setEditingIndex(index)
+
     setShowForm(true)
   }
 
-  const filteredTransactions = transactions.filter((item) => {
-    if (!filterStart && !filterEnd) return true
+  /* ================= FILTER ================= */
 
-    const itemDate = new Date(item.date)
+  const filteredTransactions =
+    transactions.filter((item) => {
 
-    if (filterStart && itemDate < new Date(filterStart))
-      return false
+      if (!filterStart && !filterEnd)
+        return true
 
-    if (filterEnd && itemDate > new Date(filterEnd))
-      return false
+      const itemDate =
+        new Date(item.date)
 
-    return true
-  })
+      if (
+        filterStart &&
+        itemDate < new Date(filterStart)
+      )
+        return false
+
+      if (
+        filterEnd &&
+        itemDate > new Date(filterEnd)
+      )
+        return false
+
+      return true
+    })
+
+  /* ================= SUMMARY ================= */
 
   const income = filteredTransactions
-    .filter((item) => item.type === "Income")
-    .reduce((a, b) => a + b.amount, 0)
+    .filter(
+      (item) => item.type === "Income"
+    )
+    .reduce(
+      (a, b) => a + b.amount,
+      0
+    )
 
   const expense = filteredTransactions
-    .filter((item) => item.type === "Expense")
-    .reduce((a, b) => a + b.amount, 0)
+    .filter(
+      (item) => item.type === "Expense"
+    )
+    .reduce(
+      (a, b) => a + b.amount,
+      0
+    )
 
   const balance = income - expense
 
-  const exportExcel = () => {
-    const worksheet = XLSX.utils.json_to_sheet(
-      filteredTransactions
-    )
+  /* ================= EXPORT ================= */
 
-    const workbook = XLSX.utils.book_new()
+  const exportExcel = () => {
+
+    const worksheet =
+      XLSX.utils.json_to_sheet(
+        filteredTransactions
+      )
+
+    const workbook =
+      XLSX.utils.book_new()
 
     XLSX.utils.book_append_sheet(
       workbook,
@@ -133,13 +249,21 @@ export default function App() {
       "Transaksi"
     )
 
-    XLSX.writeFile(workbook, "keuangan.xlsx")
+    XLSX.writeFile(
+      workbook,
+      "keuangan.xlsx"
+    )
   }
 
   const exportPDF = () => {
+
     const doc = new jsPDF()
 
-    doc.text("Laporan Keuangan", 14, 15)
+    doc.text(
+      "Laporan Keuangan",
+      14,
+      15
+    )
 
     autoTable(doc, {
       head: [
@@ -151,17 +275,24 @@ export default function App() {
           "Nominal",
         ],
       ],
-      body: filteredTransactions.map((item) => [
-        item.date,
-        item.type,
-        item.category,
-        item.detail,
-        `Rp ${item.amount.toLocaleString()}`,
-      ]),
+      body:
+        filteredTransactions.map(
+          (item) => [
+            item.date,
+            item.type,
+            item.category,
+            item.detail,
+            `Rp ${item.amount.toLocaleString()}`,
+          ]
+        ),
     })
 
-    doc.save("laporan-keuangan.pdf")
+    doc.save(
+      "laporan-keuangan.pdf"
+    )
   }
+
+  /* ================= CHART ================= */
 
   const chartData = [
     {
@@ -174,6 +305,38 @@ export default function App() {
     },
   ]
 
+  /* ================= LOGIN SCREEN ================= */
+
+  if (!user) {
+
+    return (
+      <div className="min-h-screen bg-slate-100 flex items-center justify-center p-6">
+
+        <div className="bg-white shadow-2xl rounded-3xl p-10 w-full max-w-md text-center">
+
+          <h1 className="text-4xl font-bold text-blue-900 mb-4">
+            Pengelola Keuangan
+          </h1>
+
+          <p className="text-slate-500 mb-8">
+            Login menggunakan Google
+          </p>
+
+          <button
+            onClick={loginGoogle}
+            className="w-full bg-blue-700 hover:bg-blue-800 text-white py-4 rounded-2xl font-semibold text-lg"
+          >
+            Login Google
+          </button>
+
+        </div>
+
+      </div>
+    )
+  }
+
+  /* ================= MAIN ================= */
+
   return (
     <div
       className={`min-h-screen ${
@@ -182,6 +345,7 @@ export default function App() {
           : "bg-slate-100 text-black"
       }`}
     >
+
       <div className="flex flex-col lg:flex-row">
 
         {/* Sidebar */}
@@ -190,6 +354,24 @@ export default function App() {
           <h1 className="text-3xl font-bold mb-8">
             Pengelola Keuangan
           </h1>
+
+          <div className="mb-6">
+
+            <img
+              src={user.photoURL}
+              alt=""
+              className="w-16 h-16 rounded-full mb-3"
+            />
+
+            <h2 className="font-bold">
+              {user.displayName}
+            </h2>
+
+            <p className="text-sm opacity-70">
+              {user.email}
+            </p>
+
+          </div>
 
           <div className="bg-white/10 rounded-2xl p-5 mb-6">
 
@@ -234,7 +416,9 @@ export default function App() {
           </div>
 
           <button
-            onClick={() => setShowForm(!showForm)}
+            onClick={() =>
+              setShowForm(!showForm)
+            }
             className="w-full bg-white text-blue-900 font-semibold py-3 rounded-xl hover:bg-slate-200 transition"
           >
             + Tambah Transaksi
@@ -251,21 +435,31 @@ export default function App() {
               : "🌙 Dark Mode"}
           </button>
 
+          <button
+            onClick={logout}
+            className="w-full mt-4 bg-red-600 py-3 rounded-xl"
+          >
+            Logout
+          </button>
+
         </aside>
 
         {/* Main */}
         <main className="flex-1 p-4 lg:p-6 overflow-x-auto">
 
           {/* Header */}
-          <div className={`rounded-3xl shadow-lg p-5 mb-6 ${
-            darkMode
-              ? "bg-slate-800"
-              : "bg-white"
-          }`}>
+          <div
+            className={`rounded-3xl shadow-lg p-5 mb-6 ${
+              darkMode
+                ? "bg-slate-800"
+                : "bg-white"
+            }`}
+          >
 
             <div className="flex flex-col lg:flex-row justify-between gap-4">
 
               <div>
+
                 <h2 className="text-3xl font-bold">
                   Dashboard
                 </h2>
@@ -274,6 +468,7 @@ export default function App() {
                   Kelola pemasukan &
                   pengeluaran
                 </p>
+
               </div>
 
               <div className="flex flex-wrap gap-3">
@@ -320,14 +515,16 @@ export default function App() {
 
           </div>
 
-          {/* Form */}
+          {/* FORM */}
           {showForm && (
 
-            <div className={`rounded-3xl shadow-lg p-6 mb-6 ${
-              darkMode
-                ? "bg-slate-800"
-                : "bg-white"
-            }`}>
+            <div
+              className={`rounded-3xl shadow-lg p-6 mb-6 ${
+                darkMode
+                  ? "bg-slate-800"
+                  : "bg-white"
+              }`}
+            >
 
               <h3 className="text-2xl font-bold mb-5">
                 {editingIndex !== null
@@ -382,6 +579,7 @@ export default function App() {
                   }
                   className="border rounded-xl px-4 py-3 text-black"
                 >
+
                   <option value="">
                     Pilih Kategori
                   </option>
@@ -420,6 +618,7 @@ export default function App() {
                       </option>
                     </>
                   )}
+
                 </select>
 
                 <input
@@ -465,7 +664,7 @@ export default function App() {
 
           )}
 
-          {/* Cards */}
+          {/* CARDS */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
 
             <div className="bg-green-500 text-white p-6 rounded-3xl shadow-lg">
@@ -500,12 +699,14 @@ export default function App() {
 
           </div>
 
-          {/* Chart */}
-          <div className={`rounded-3xl shadow-lg p-6 mb-6 ${
-            darkMode
-              ? "bg-slate-800"
-              : "bg-white"
-          }`}>
+          {/* CHART */}
+          <div
+            className={`rounded-3xl shadow-lg p-6 mb-6 ${
+              darkMode
+                ? "bg-slate-800"
+                : "bg-white"
+            }`}
+          >
 
             <h3 className="text-2xl font-bold mb-4">
               Grafik Keuangan
@@ -520,9 +721,7 @@ export default function App() {
 
                 <BarChart data={chartData}>
 
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                  />
+                  <CartesianGrid strokeDasharray="3 3" />
 
                   <XAxis dataKey="name" />
 
@@ -544,12 +743,14 @@ export default function App() {
 
           </div>
 
-          {/* Table */}
-          <div className={`rounded-3xl shadow-lg overflow-x-auto ${
-            darkMode
-              ? "bg-slate-800"
-              : "bg-white"
-          }`}>
+          {/* TABLE */}
+          <div
+            className={`rounded-3xl shadow-lg overflow-x-auto ${
+              darkMode
+                ? "bg-slate-800"
+                : "bg-white"
+            }`}
+          >
 
             <table className="w-full min-w-[700px]">
 
@@ -600,6 +801,7 @@ export default function App() {
                       </td>
 
                       <td className="p-4">
+
                         <span
                           className={`px-3 py-1 rounded-full text-sm ${
                             item.type ===
@@ -610,6 +812,7 @@ export default function App() {
                         >
                           {item.type}
                         </span>
+
                       </td>
 
                       <td className="p-4">
